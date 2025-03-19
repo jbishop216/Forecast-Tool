@@ -1,54 +1,45 @@
-from models import init_db, get_session, Employee, GA01Week, WorkCode, Forecast
-from datetime import date
-import datetime
+from models import init_db, get_session, Employee, GA01Week, WorkCode, Settings, ProjectAllocation, PlannedChange
+from datetime import datetime
 
 def initialize_database():
-    # Create database and tables
+    """Initialize the database with required tables and default data"""
+    # Create tables
     init_db()
+    
     session = get_session()
     
-    # Initialize work codes
-    work_codes = [
-        {"code": "Work Time", "description": "Regular work time"},
-        {"code": "Project Time", "description": "Time spent on projects"}
-    ]
+    # Check if work codes exist
+    work_codes = session.query(WorkCode).all()
+    if not work_codes:
+        # Add default work codes
+        work_time = WorkCode(code="Work Time", description="Regular work time")
+        project_time = WorkCode(code="Project Time", description="Project allocation time")
+        
+        session.add(work_time)
+        session.add(project_time)
+        session.commit()
     
-    for wc_data in work_codes:
-        wc = WorkCode(
-            code=wc_data["code"],
-            description=wc_data["description"]
-        )
-        session.add(wc)
+    # Initialize settings if they don't exist
+    settings = session.query(Settings).first()
+    if not settings:
+        settings = Settings(fte_hours=34.5, contractor_hours=39.0)
+        session.add(settings)
+        session.commit()
     
-    # Initialize default GA01 weeks for current year
-    current_year = datetime.datetime.now().year
-    default_weeks = {
-        1: 4.0,  # January
-        2: 4.0,  # February
-        3: 4.33, # March
-        4: 4.0,  # April
-        5: 4.33, # May
-        6: 4.33, # June
-        7: 4.0,  # July
-        8: 4.33, # August
-        9: 4.0,  # September
-        10: 4.33, # October
-        11: 4.33, # November
-        12: 4.0,  # December
-    }
+    # Initialize GA01 weeks for current year if they don't exist
+    current_year = datetime.now().year
+    ga01_weeks = session.query(GA01Week).filter(GA01Week.year == current_year).all()
     
-    for month, weeks in default_weeks.items():
-        ga01 = GA01Week(
-            year=current_year,
-            month=month,
-            weeks=weeks
-        )
-        session.add(ga01)
+    if not ga01_weeks:
+        # Add default GA01 weeks (4.0 weeks per month)
+        for month in range(1, 13):
+            ga01 = GA01Week(year=current_year, month=month, weeks=4.0)
+            session.add(ga01)
+        session.commit()
     
-    session.commit()
     session.close()
     
-    print("Database initialized with default work codes and GA01 weeks")
+    print("Database initialized successfully!")
 
 if __name__ == "__main__":
     initialize_database() 
