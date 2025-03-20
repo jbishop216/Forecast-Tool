@@ -469,105 +469,91 @@ class EmployeeTab(ttk.Frame):
 
 class ProjectAllocationTab(ttk.Frame):
     def __init__(self, parent):
-        super().__init__(parent, padding="10")
-        self.parent = parent
-        self.create_widgets()
+        super().__init__(parent)
         
-    def create_widgets(self):
         # Create toolbar
-        toolbar = ttk.Frame(self, style="Panel.TFrame")
-        toolbar.pack(fill=tk.X, pady=(0, 10), padx=5)
+        toolbar = ttk.Frame(self)
+        toolbar.pack(fill=tk.X, padx=5, pady=5)
         
-        # Add decorative toolbar accent
-        accent_canvas = tk.Canvas(toolbar, width=3, height=30, highlightthickness=0)
-        accent_canvas.pack(side=tk.LEFT, padx=(0, 10), fill=tk.Y)
-        # Draw a gradient accent
-        for i in range(30):
-            # Gradient from primary to secondary 
-            r = int(74 + (52-74) * i/30)
-            g = int(125 + (195-125) * i/30)
-            b = int(186 + (143-186) * i/30)
-            color = f'#{r:02x}{g:02x}{b:02x}'
-            accent_canvas.create_line(0, i, 3, i, fill=color)
+        ttk.Button(toolbar, text="Add Allocation", command=self.add_allocation).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Edit Allocation", command=self.edit_allocation).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Delete Allocation", command=self.delete_allocation).pack(side=tk.LEFT, padx=2)
         
-        # Button container for better visual grouping
-        button_container = ttk.Frame(toolbar, style="Panel.TFrame")
-        button_container.pack(side=tk.LEFT, fill=tk.Y)
+        # Create treeview with scrollbar
+        self.tree_frame = ttk.Frame(self)
+        self.tree_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        ttk.Button(button_container, text="Add Allocation", command=self.add_allocation).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_container, text="Refresh", command=self.load_allocations).pack(side=tk.LEFT, padx=5)
+        self.tree = ttk.Treeview(self.tree_frame, columns=(
+            "manager_code", "year", "cost_center", "work_code",
+            "jan", "feb", "mar", "apr", "may", "jun",
+            "jul", "aug", "sep", "oct", "nov", "dec"
+        ), show="headings")
         
-        # Create treeview
-        self.tree = ttk.Treeview(self, columns=("Manager", "Cost Center", "Work Code", "Year", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), show="headings")
+        # Add scrollbar
+        scrollbar = ttk.Scrollbar(self.tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Configure columns
+        self.tree.heading("manager_code", text="Manager")
+        self.tree.heading("year", text="Year")
+        self.tree.heading("cost_center", text="Cost Center")
+        self.tree.heading("work_code", text="Work Code")
+        self.tree.heading("jan", text="Jan")
+        self.tree.heading("feb", text="Feb")
+        self.tree.heading("mar", text="Mar")
+        self.tree.heading("apr", text="Apr")
+        self.tree.heading("may", text="May")
+        self.tree.heading("jun", text="Jun")
+        self.tree.heading("jul", text="Jul")
+        self.tree.heading("aug", text="Aug")
+        self.tree.heading("sep", text="Sep")
+        self.tree.heading("oct", text="Oct")
+        self.tree.heading("nov", text="Nov")
+        self.tree.heading("dec", text="Dec")
+        
+        # Set column widths
+        self.tree.column("manager_code", width=100)
+        self.tree.column("year", width=60)
+        self.tree.column("cost_center", width=100)
+        self.tree.column("work_code", width=100)
+        for month in ["jan", "feb", "mar", "apr", "may", "jun",
+                     "jul", "aug", "sep", "oct", "nov", "dec"]:
+            self.tree.column(month, width=50)
+        
         self.tree.pack(fill=tk.BOTH, expand=True)
         
-        # Configure treeview columns
-        self.tree.heading("Manager", text="Manager")
-        self.tree.heading("Cost Center", text="Cost Center")
-        self.tree.heading("Work Code", text="Work Code")
-        self.tree.heading("Year", text="Year")
-        self.tree.heading("Jan", text="Jan")
-        self.tree.heading("Feb", text="Feb")
-        self.tree.heading("Mar", text="Mar")
-        self.tree.heading("Apr", text="Apr")
-        self.tree.heading("May", text="May")
-        self.tree.heading("Jun", text="Jun")
-        self.tree.heading("Jul", text="Jul")
-        self.tree.heading("Aug", text="Aug")
-        self.tree.heading("Sep", text="Sep")
-        self.tree.heading("Oct", text="Oct")
-        self.tree.heading("Nov", text="Nov")
-        self.tree.heading("Dec", text="Dec")
-        
-        # Configure column widths
-        self.tree.column("Manager", width=100)
-        self.tree.column("Cost Center", width=100)
-        self.tree.column("Work Code", width=100)
-        self.tree.column("Year", width=60)
-        self.tree.column("Jan", width=60)
-        self.tree.column("Feb", width=60)
-        self.tree.column("Mar", width=60)
-        self.tree.column("Apr", width=60)
-        self.tree.column("May", width=60)
-        self.tree.column("Jun", width=60)
-        self.tree.column("Jul", width=60)
-        self.tree.column("Aug", width=60)
-        self.tree.column("Sep", width=60)
-        self.tree.column("Oct", width=60)
-        self.tree.column("Nov", width=60)
-        self.tree.column("Dec", width=60)
-        
-        # Load initial data
+        # Load allocations
         self.load_allocations()
     
     def load_allocations(self):
         """Load project allocations from database"""
-        # Clear existing items
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        
         try:
+            # Clear existing items
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+            
             session = get_session()
             allocations = session.query(ProjectAllocation).all()
             
-            for alloc in allocations:
+            for allocation in allocations:
                 self.tree.insert("", tk.END, values=(
-                    alloc.manager_code,
-                    alloc.cost_center,
-                    alloc.work_code,
-                    alloc.year,
-                    alloc.jan,
-                    alloc.feb,
-                    alloc.mar,
-                    alloc.apr,
-                    alloc.may,
-                    alloc.jun,
-                    alloc.jul,
-                    alloc.aug,
-                    alloc.sep,
-                    alloc.oct,
-                    alloc.nov,
-                    alloc.dec
+                    allocation.manager_code,
+                    allocation.year,
+                    allocation.cost_center,
+                    allocation.work_code,
+                    allocation.jan,
+                    allocation.feb,
+                    allocation.mar,
+                    allocation.apr,
+                    allocation.may,
+                    allocation.jun,
+                    allocation.jul,
+                    allocation.aug,
+                    allocation.sep,
+                    allocation.oct,
+                    allocation.nov,
+                    allocation.dec
                 ))
             
             session.close()
@@ -575,78 +561,139 @@ class ProjectAllocationTab(ttk.Frame):
             messagebox.showerror("Error", f"Failed to load allocations: {str(e)}")
     
     def add_allocation(self):
-        """Open dialog to add a new project allocation"""
-        session = get_session()
-        
-        # Get the first manager code for demo
-        # In a real app, you would have user select a manager
-        manager = session.query(Employee.manager_code).first()
-        manager_code = manager[0] if manager else ""
-        session.close()
-        
-        if not manager_code:
-            messagebox.showinfo("No Manager", "Please add employees with manager codes first.")
-            return
+        """Add a new project allocation"""
+        try:
+            dialog = ProjectAllocationDialog(self, None, datetime.now().year)
+            self.wait_window(dialog)
             
-        # Current year as default
-        year = datetime.now().year
-        
-        # Open dialog
-        dialog = ProjectAllocationDialog(self, manager_code, year)
-        dialog.wait_window()
-        
-        if dialog.get_allocations():
-            try:
+            if dialog.result:
                 session = get_session()
                 
-                # Get allocations from dialog
-                allocations = dialog.get_allocations()
-                
-                # Delete existing allocations for this manager and year
-                session.query(ProjectAllocation).filter(
-                    ProjectAllocation.manager_code == manager_code,
-                    ProjectAllocation.year == year
-                ).delete()
-                
-                # Add new allocations
-                project_allocation = ProjectAllocation(
-                    manager_code=manager_code,
-                    cost_center=allocations['cost_center'],
-                    work_code=allocations['work_code'],
-                    year=year,
-                    jan=allocations['jan'],
-                    feb=allocations['feb'],
-                    mar=allocations['mar'],
-                    apr=allocations['apr'],
-                    may=allocations['may'],
-                    jun=allocations['jun'],
-                    jul=allocations['jul'],
-                    aug=allocations['aug'],
-                    sep=allocations['sep'],
-                    oct=allocations['oct'],
-                    nov=allocations['nov'],
-                    dec=allocations['dec']
+                # Create new allocation
+                allocation = ProjectAllocation(
+                    manager_code=dialog.result["manager_code"],
+                    year=dialog.result["year"],
+                    cost_center=dialog.result["cost_center"],
+                    work_code=dialog.result["work_code"],
+                    jan=dialog.result["jan"],
+                    feb=dialog.result["feb"],
+                    mar=dialog.result["mar"],
+                    apr=dialog.result["apr"],
+                    may=dialog.result["may"],
+                    jun=dialog.result["jun"],
+                    jul=dialog.result["jul"],
+                    aug=dialog.result["aug"],
+                    sep=dialog.result["sep"],
+                    oct=dialog.result["oct"],
+                    nov=dialog.result["nov"],
+                    dec=dialog.result["dec"]
                 )
-                session.add(project_allocation)
                 
+                session.add(allocation)
                 session.commit()
                 session.close()
                 
-                # Refresh view
+                # Reload allocations
                 self.load_allocations()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to add allocation: {str(e)}")
+    
+    def edit_allocation(self):
+        """Edit selected project allocation"""
+        try:
+            selected = self.tree.selection()
+            if not selected:
+                messagebox.showwarning("Warning", "Please select an allocation to edit.")
+                return
+            
+            # Get selected allocation
+            values = self.tree.item(selected[0])["values"]
+            
+            session = get_session()
+            allocation = session.query(ProjectAllocation).filter(
+                ProjectAllocation.manager_code == values[0],
+                ProjectAllocation.year == values[1],
+                ProjectAllocation.cost_center == values[2],
+                ProjectAllocation.work_code == values[3]
+            ).first()
+            
+            if not allocation:
+                session.close()
+                messagebox.showerror("Error", "Selected allocation not found in database.")
+                return
+            
+            # Open dialog with current values
+            dialog = ProjectAllocationDialog(self, allocation.manager_code, allocation.year, allocation)
+            self.wait_window(dialog)
+            
+            if dialog.result:
+                # Update allocation
+                allocation.manager_code = dialog.result["manager_code"]
+                allocation.year = dialog.result["year"]
+                allocation.cost_center = dialog.result["cost_center"]
+                allocation.work_code = dialog.result["work_code"]
+                allocation.jan = dialog.result["jan"]
+                allocation.feb = dialog.result["feb"]
+                allocation.mar = dialog.result["mar"]
+                allocation.apr = dialog.result["apr"]
+                allocation.may = dialog.result["may"]
+                allocation.jun = dialog.result["jun"]
+                allocation.jul = dialog.result["jul"]
+                allocation.aug = dialog.result["aug"]
+                allocation.sep = dialog.result["sep"]
+                allocation.oct = dialog.result["oct"]
+                allocation.nov = dialog.result["nov"]
+                allocation.dec = dialog.result["dec"]
                 
-                # Show success message
-                messagebox.showinfo("Success", "Project allocations updated successfully.")
-                
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to update allocations: {str(e)}")
+                session.commit()
+            
+            session.close()
+            
+            # Reload allocations
+            self.load_allocations()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to edit allocation: {str(e)}")
+    
+    def delete_allocation(self):
+        """Delete selected project allocation"""
+        try:
+            selected = self.tree.selection()
+            if not selected:
+                messagebox.showwarning("Warning", "Please select an allocation to delete.")
+                return
+            
+            if not messagebox.askyesno("Confirm Delete", "Are you sure you want to delete this allocation?"):
+                return
+            
+            # Get selected allocation
+            values = self.tree.item(selected[0])["values"]
+            
+            session = get_session()
+            allocation = session.query(ProjectAllocation).filter(
+                ProjectAllocation.manager_code == values[0],
+                ProjectAllocation.year == values[1],
+                ProjectAllocation.cost_center == values[2],
+                ProjectAllocation.work_code == values[3]
+            ).first()
+            
+            if allocation:
+                session.delete(allocation)
+                session.commit()
+            
+            session.close()
+            
+            # Reload allocations
+            self.load_allocations()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to delete allocation: {str(e)}")
 
 class ProjectAllocationDialog(tk.Toplevel):
-    def __init__(self, parent, manager_code, year):
+    def __init__(self, parent, manager_code, year, allocation=None):
         super().__init__(parent)
         self.parent = parent
         self.manager_code = manager_code
         self.year = year
+        self.allocation = allocation
         self.result = None
         
         # Make dialog modal
@@ -665,8 +712,18 @@ class ProjectAllocationDialog(tk.Toplevel):
         info_frame = ttk.LabelFrame(frame, text="Allocation Info", padding="10")
         info_frame.pack(fill=tk.X, pady=(0, 10))
         
-        ttk.Label(info_frame, text=f"Manager Code: {manager_code}").pack(side=tk.LEFT, padx=5)
-        ttk.Label(info_frame, text=f"Year: {year}").pack(side=tk.LEFT, padx=5)
+        # Manager selection
+        ttk.Label(info_frame, text="Manager Code:").pack(side=tk.LEFT, padx=5)
+        self.manager_var = tk.StringVar(value=manager_code if manager_code else "")
+        self.manager_combo = ttk.Combobox(info_frame, textvariable=self.manager_var, width=20, state="readonly")
+        self.manager_combo.pack(side=tk.LEFT, padx=5)
+        
+        # Year selection
+        ttk.Label(info_frame, text="Year:").pack(side=tk.LEFT, padx=5)
+        self.year_var = tk.StringVar(value=str(year))
+        years = [str(y) for y in range(datetime.now().year - 2, datetime.now().year + 3)]
+        self.year_combo = ttk.Combobox(info_frame, textvariable=self.year_var, values=years, width=6, state="readonly")
+        self.year_combo.pack(side=tk.LEFT, padx=5)
         
         # Project details
         project_frame = ttk.LabelFrame(frame, text="Project Details", padding="10")
@@ -721,10 +778,34 @@ class ProjectAllocationDialog(tk.Toplevel):
         ttk.Button(button_frame, text="OK", command=self.on_ok, width=10).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Cancel", command=self.on_cancel, width=10).pack(side=tk.LEFT, padx=5)
         
-        # Load current allocations
-        self.load_allocations()
+        # Load manager codes
+        session = get_session()
+        managers = session.query(Employee.manager_code).distinct().all()
+        self.manager_combo['values'] = [m[0] for m in managers]
+        session.close()
         
-        # Center the dialog on the parent window
+        # If editing, populate fields
+        if allocation:
+            self.manager_var.set(allocation.manager_code)
+            self.year_var.set(str(allocation.year))
+            self.cost_center_var.set(allocation.cost_center)
+            self.work_code_var.set(allocation.work_code)
+            
+            # Set monthly values
+            self.spinboxes["jan"].set(allocation.jan or 0)
+            self.spinboxes["feb"].set(allocation.feb or 0)
+            self.spinboxes["mar"].set(allocation.mar or 0)
+            self.spinboxes["apr"].set(allocation.apr or 0)
+            self.spinboxes["may"].set(allocation.may or 0)
+            self.spinboxes["jun"].set(allocation.jun or 0)
+            self.spinboxes["jul"].set(allocation.jul or 0)
+            self.spinboxes["aug"].set(allocation.aug or 0)
+            self.spinboxes["sep"].set(allocation.sep or 0)
+            self.spinboxes["oct"].set(allocation.oct or 0)
+            self.spinboxes["nov"].set(allocation.nov or 0)
+            self.spinboxes["dec"].set(allocation.dec or 0)
+        
+        # Center the dialog
         self.center_on_parent()
     
     def paste_values(self):
@@ -785,45 +866,16 @@ class ProjectAllocationDialog(tk.Toplevel):
         # Set position only (preserve size)
         self.geometry(f"+{x}+{y}")
     
-    def load_allocations(self):
-        """Load project allocations from database"""
-        session = get_session()
-        allocations = session.query(ProjectAllocation).filter(
-            ProjectAllocation.manager_code == self.manager_code,
-            ProjectAllocation.year == self.year
-        ).all()
-        
-        for allocation in allocations:
-            if allocation.cost_center:
-                self.cost_center_var.set(allocation.cost_center)
-            if allocation.work_code:
-                self.work_code_var.set(allocation.work_code)
-            
-            # Set monthly values
-            self.spinboxes["jan"].set(allocation.jan or 0)
-            self.spinboxes["feb"].set(allocation.feb or 0)
-            self.spinboxes["mar"].set(allocation.mar or 0)
-            self.spinboxes["apr"].set(allocation.apr or 0)
-            self.spinboxes["may"].set(allocation.may or 0)
-            self.spinboxes["jun"].set(allocation.jun or 0)
-            self.spinboxes["jul"].set(allocation.jul or 0)
-            self.spinboxes["aug"].set(allocation.aug or 0)
-            self.spinboxes["sep"].set(allocation.sep or 0)
-            self.spinboxes["oct"].set(allocation.oct or 0)
-            self.spinboxes["nov"].set(allocation.nov or 0)
-            self.spinboxes["dec"].set(allocation.dec or 0)
-        
-        session.close()
-    
     def on_ok(self):
         try:
             # Validate required fields
-            cost_center = self.cost_center_var.get().strip()
-            work_code = self.work_code_var.get().strip()
-            
-            if not cost_center:
+            if not self.manager_var.get():
+                raise ValueError("Manager Code is required")
+            if not self.year_var.get():
+                raise ValueError("Year is required")
+            if not self.cost_center_var.get().strip():
                 raise ValueError("Cost Center is required")
-            if not work_code:
+            if not self.work_code_var.get().strip():
                 raise ValueError("Work Code is required")
             
             # Get monthly values
@@ -835,8 +887,10 @@ class ProjectAllocationDialog(tk.Toplevel):
                     raise ValueError(f"Invalid value for {month}")
             
             self.result = {
-                "cost_center": cost_center,
-                "work_code": work_code,
+                "manager_code": self.manager_var.get(),
+                "year": int(self.year_var.get()),
+                "cost_center": self.cost_center_var.get().strip(),
+                "work_code": self.work_code_var.get().strip(),
                 **monthly_values
             }
             self.destroy()
@@ -1660,7 +1714,7 @@ class ForecastTab(ttk.Frame):
             ).order_by(PlannedChange.effective_date).all()
             
             # Create a dictionary to track active employees and their hours per week
-            active_employees = {}  # key: (manager_code, cost_center), value: list of (start_date, end_date, hours_per_week)
+            active_employees = {}  # key: (manager_code, cost_center), value: list of (employee_id, start_date, end_date, hours_per_week)
             
             # Initialize with existing employees
             existing_employees = session.query(Employee).filter(
@@ -1671,7 +1725,9 @@ class ForecastTab(ttk.Frame):
             for emp in existing_employees:
                 key = (emp.manager_code, emp.cost_center)
                 hours = settings.contractor_hours if emp.employment_type == "CONTRACTOR" else settings.fte_hours
-                active_employees[key] = [(emp.start_date, emp.end_date, hours)]
+                if key not in active_employees:
+                    active_employees[key] = []
+                active_employees[key].append((emp.id, emp.start_date, emp.end_date, hours))
             
             # Add planned changes to active_employees
             for change in planned_changes:
@@ -1680,21 +1736,24 @@ class ForecastTab(ttk.Frame):
                     hours = settings.contractor_hours if change.employment_type == "CONTRACTOR" else settings.fte_hours
                     if key not in active_employees:
                         active_employees[key] = []
-                    active_employees[key].append((change.effective_date, None, hours))
+                    # New hires don't have an employee_id yet
+                    active_employees[key].append((None, change.effective_date, None, hours))
                 elif change.change_type == "Termination":
-                    if key in active_employees:
-                        # Update the end date of the latest entry
-                        entries = active_employees[key]
-                        if entries:
-                            latest = entries[-1]
-                            entries[-1] = (latest[0], change.effective_date, latest[2])
+                    if key in active_employees and change.employee_id:
+                        # Update the end date of the specific employee being terminated
+                        for i, (emp_id, start_date, end_date, hours) in enumerate(active_employees[key]):
+                            if emp_id == change.employee_id:
+                                active_employees[key][i] = (emp_id, start_date, change.effective_date, hours)
+                                break
                 elif change.change_type == "Conversion":
-                    if key in active_employees:
-                        # Add new entry with updated hours
-                        entries = active_employees[key]
-                        if entries:
-                            hours = settings.contractor_hours if change.employment_type == "CONTRACTOR" else settings.fte_hours
-                            active_employees[key].append((change.effective_date, None, hours))
+                    if key in active_employees and change.employee_id:
+                        # Add new entry with updated hours for the specific employee
+                        for i, (emp_id, start_date, end_date, hours) in enumerate(active_employees[key]):
+                            if emp_id == change.employee_id:
+                                hours = settings.contractor_hours if change.employment_type == "CONTRACTOR" else settings.fte_hours
+                                active_employees[key][i] = (emp_id, start_date, change.effective_date, hours)
+                                active_employees[key].append((emp_id, change.effective_date, None, hours))
+                                break
             
             for allocation in allocations:
                 total_hours = 0
@@ -1719,7 +1778,7 @@ class ForecastTab(ttk.Frame):
                     # Calculate total work hours for the month based on active employees
                     total_work_hours = 0
                     if key in active_employees:
-                        for start_date, end_date, hours_per_week in active_employees[key]:
+                        for emp_id, start_date, end_date, hours_per_week in active_employees[key]:
                             # For each month, if the employee is active during any part of the month,
                             # count them for the full month
                             if (start_date <= month_end and 
@@ -2583,6 +2642,284 @@ class ImportEmployeesDialog(tk.Toplevel):
             messagebox.showerror("Error", f"Failed to import data: {str(e)}")
             if 'session' in locals():
                 session.close()
+
+class AllocationDialog(tk.Toplevel):
+    def __init__(self, parent, allocation=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.allocation = allocation
+        self.result = None
+        
+        self.title("Add Allocation" if not allocation else "Edit Allocation")
+        self.geometry("400x300")
+        self.resizable(False, False)
+        
+        # Make dialog modal
+        self.transient(parent)
+        self.grab_set()
+        
+        # Create main frame
+        main_frame = ttk.Frame(self, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Employee selection
+        ttk.Label(main_frame, text="Employee:").pack(anchor=tk.W)
+        self.employee_var = tk.StringVar()
+        self.employee_combo = ttk.Combobox(main_frame, textvariable=self.employee_var, state="readonly")
+        self.employee_combo['values'] = [emp.name for emp in self.parent.employees]
+        self.employee_combo.pack(fill=tk.X, pady=(0, 10))
+        
+        # Project selection
+        ttk.Label(main_frame, text="Project:").pack(anchor=tk.W)
+        self.project_var = tk.StringVar()
+        self.project_combo = ttk.Combobox(main_frame, textvariable=self.project_var, state="readonly")
+        self.project_combo['values'] = [proj.name for proj in self.parent.projects]
+        self.project_combo.pack(fill=tk.X, pady=(0, 10))
+        
+        # Hours
+        ttk.Label(main_frame, text="Hours:").pack(anchor=tk.W)
+        self.hours_var = tk.StringVar()
+        ttk.Entry(main_frame, textvariable=self.hours_var).pack(fill=tk.X, pady=(0, 10))
+        
+        # Start date
+        ttk.Label(main_frame, text="Start Date (YYYY-MM-DD):").pack(anchor=tk.W)
+        self.start_date_var = tk.StringVar()
+        ttk.Entry(main_frame, textvariable=self.start_date_var).pack(fill=tk.X, pady=(0, 10))
+        
+        # End date
+        ttk.Label(main_frame, text="End Date (YYYY-MM-DD):").pack(anchor=tk.W)
+        self.end_date_var = tk.StringVar()
+        ttk.Entry(main_frame, textvariable=self.end_date_var).pack(fill=tk.X, pady=(0, 10))
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        ttk.Button(button_frame, text="OK", command=self.on_ok, width=10).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=self.destroy, width=10).pack(side=tk.RIGHT, padx=5)
+        
+        # If editing, populate fields
+        if allocation:
+            self.employee_var.set(allocation.employee.name)
+            self.project_var.set(allocation.project.name)
+            self.hours_var.set(str(allocation.hours))
+            self.start_date_var.set(allocation.start_date.strftime("%Y-%m-%d"))
+            self.end_date_var.set(allocation.end_date.strftime("%Y-%m-%d") if allocation.end_date else "")
+        
+        # Center the dialog
+        self.center_on_parent()
+    
+    def on_ok(self):
+        """Handle OK button click"""
+        try:
+            # Validate required fields
+            if not self.employee_var.get():
+                messagebox.showerror("Error", "Please select an employee")
+                return
+            if not self.project_var.get():
+                messagebox.showerror("Error", "Please select a project")
+                return
+            if not self.hours_var.get():
+                messagebox.showerror("Error", "Please enter hours")
+                return
+            if not self.start_date_var.get():
+                messagebox.showerror("Error", "Please enter start date")
+                return
+            
+            # Parse dates
+            start_date = datetime.strptime(self.start_date_var.get(), "%Y-%m-%d").date()
+            end_date = None
+            if self.end_date_var.get():
+                end_date = datetime.strptime(self.end_date_var.get(), "%Y-%m-%d").date()
+            
+            # Get employee and project
+            employee = next(emp for emp in self.parent.employees if emp.name == self.employee_var.get())
+            project = next(proj for proj in self.parent.projects if proj.name == self.project_var.get())
+            
+            # Create result
+            self.result = {
+                'employee_id': employee.id,
+                'project_id': project.id,
+                'hours': float(self.hours_var.get()),
+                'start_date': start_date,
+                'end_date': end_date
+            }
+            
+            self.destroy()
+            
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to create allocation: {str(e)}")
+    
+    def center_on_parent(self):
+        """Center the dialog on its parent window"""
+        self.update_idletasks()
+        parent_x = self.parent.winfo_rootx()
+        parent_y = self.parent.winfo_rooty()
+        parent_width = self.parent.winfo_width()
+        parent_height = self.parent.winfo_height()
+        dialog_width = self.winfo_width()
+        dialog_height = self.winfo_height()
+        x = parent_x + (parent_width - dialog_width) // 2
+        y = parent_y + (parent_height - dialog_height) // 2
+        self.geometry(f"+{x}+{y}")
+
+class AllocationsTab(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.allocations = []
+        self.load_allocations()
+        
+        # Create toolbar
+        toolbar = ttk.Frame(self)
+        toolbar.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Button(toolbar, text="Add Allocation", command=self.add_allocation).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Edit Allocation", command=self.edit_allocation).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Delete Allocation", command=self.delete_allocation).pack(side=tk.LEFT, padx=2)
+        
+        # Create treeview
+        self.tree = ttk.Treeview(self, columns=("employee", "project", "hours", "start_date", "end_date"), show="headings")
+        self.tree.heading("employee", text="Employee")
+        self.tree.heading("project", text="Project")
+        self.tree.heading("hours", text="Hours")
+        self.tree.heading("start_date", text="Start Date")
+        self.tree.heading("end_date", text="End Date")
+        
+        # Configure column widths
+        self.tree.column("employee", width=150)
+        self.tree.column("project", width=150)
+        self.tree.column("hours", width=100)
+        self.tree.column("start_date", width=100)
+        self.tree.column("end_date", width=100)
+        
+        # Add scrollbar
+        scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Pack widgets
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Load data
+        self.refresh()
+    
+    def load_allocations(self):
+        """Load allocations from database"""
+        try:
+            session = Session()
+            self.allocations = session.query(Allocation).all()
+            session.close()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load allocations: {str(e)}")
+    
+    def refresh(self):
+        """Refresh the treeview with current data"""
+        # Clear existing items
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        # Add allocations
+        for allocation in self.allocations:
+            self.tree.insert("", tk.END, values=(
+                allocation.employee.name,
+                allocation.project.name,
+                allocation.hours,
+                allocation.start_date.strftime("%Y-%m-%d"),
+                allocation.end_date.strftime("%Y-%m-%d") if allocation.end_date else ""
+            ))
+    
+    def add_allocation(self):
+        """Add a new allocation"""
+        dialog = AllocationDialog(self)
+        self.wait_window(dialog)
+        
+        if dialog.result:
+            try:
+                session = Session()
+                allocation = Allocation(**dialog.result)
+                session.add(allocation)
+                session.commit()
+                session.close()
+                
+                self.load_allocations()
+                self.refresh()
+                
+                messagebox.showinfo("Success", "Allocation added successfully")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to add allocation: {str(e)}")
+    
+    def edit_allocation(self):
+        """Edit selected allocation"""
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("Warning", "Please select an allocation to edit")
+            return
+        
+        # Get selected allocation
+        item = self.tree.item(selection[0])
+        employee_name = item['values'][0]
+        project_name = item['values'][1]
+        
+        allocation = next(
+            (a for a in self.allocations 
+             if a.employee.name == employee_name and a.project.name == project_name),
+            None
+        )
+        
+        if allocation:
+            dialog = AllocationDialog(self, allocation)
+            self.wait_window(dialog)
+            
+            if dialog.result:
+                try:
+                    session = Session()
+                    for key, value in dialog.result.items():
+                        setattr(allocation, key, value)
+                    session.commit()
+                    session.close()
+                    
+                    self.load_allocations()
+                    self.refresh()
+                    
+                    messagebox.showinfo("Success", "Allocation updated successfully")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to update allocation: {str(e)}")
+    
+    def delete_allocation(self):
+        """Delete selected allocation"""
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("Warning", "Please select an allocation to delete")
+            return
+        
+        if messagebox.askyesno("Confirm", "Are you sure you want to delete this allocation?"):
+            # Get selected allocation
+            item = self.tree.item(selection[0])
+            employee_name = item['values'][0]
+            project_name = item['values'][1]
+            
+            allocation = next(
+                (a for a in self.allocations 
+                 if a.employee.name == employee_name and a.project.name == project_name),
+                None
+            )
+            
+            if allocation:
+                try:
+                    session = Session()
+                    session.delete(allocation)
+                    session.commit()
+                    session.close()
+                    
+                    self.load_allocations()
+                    self.refresh()
+                    
+                    messagebox.showinfo("Success", "Allocation deleted successfully")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to delete allocation: {str(e)}")
 
 if __name__ == "__main__":
     app = ForecastApp()
