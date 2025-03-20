@@ -1,13 +1,14 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Float, Date, Enum
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 import enum
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+import csv
+import os
 
 # Create database engine
 engine = create_engine('sqlite:///forecast_tool.db')
@@ -2199,7 +2200,8 @@ class ForecastApp(tk.Tk):
         help_menu.add_command(label="About", command=self.show_about)
     
     def import_employees(self):
-        messagebox.showinfo("Not Implemented", "Import Employees feature coming soon!")
+        """Open dialog to import employees from CSV"""
+        dialog = ImportEmployeesDialog(self)
     
     def import_ga01_weeks(self):
         messagebox.showinfo("Not Implemented", "Import GA01 Weeks feature coming soon!")
@@ -2334,6 +2336,253 @@ class SettingsDialog(tk.Toplevel):
     
     def get_settings(self):
         return self.result
+
+class ImportEmployeesDialog(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.filename = None
+        self.data = None
+        self.column_mappings = {}
+        
+        self.title("Import Employees")
+        self.geometry("800x600")
+        self.resizable(True, True)
+        
+        # Make dialog modal
+        self.transient(parent)
+        self.grab_set()
+        
+        # Create main frame
+        main_frame = ttk.Frame(self, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # File selection
+        file_frame = ttk.LabelFrame(main_frame, text="File Selection", padding="5")
+        file_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.file_label = ttk.Label(file_frame, text="No file selected")
+        self.file_label.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        self.browse_button = ttk.Button(file_frame, text="Browse", command=self.browse_file)
+        self.browse_button.pack(side=tk.RIGHT, padx=5)
+        
+        # Column mapping
+        mapping_frame = ttk.LabelFrame(main_frame, text="Column Mapping", padding="5")
+        mapping_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # Required fields
+        required_fields = ["name", "manager_code", "cost_center", "employment_type", "start_date"]
+        self.mapping_vars = {}
+        
+        for i, field in enumerate(required_fields):
+            ttk.Label(mapping_frame, text=f"{field.replace('_', ' ').title()}:").grid(row=i, column=0, sticky=tk.W, padx=5, pady=2)
+            var = tk.StringVar()
+            self.mapping_vars[field] = var
+            combo = ttk.Combobox(mapping_frame, textvariable=var, state="readonly", width=30)
+            combo.grid(row=i, column=1, sticky=tk.W, padx=5, pady=2)
+        
+        # Optional fields
+        ttk.Label(mapping_frame, text="End Date:").grid(row=len(required_fields), column=0, sticky=tk.W, padx=5, pady=2)
+        self.mapping_vars["end_date"] = tk.StringVar()
+        combo = ttk.Combobox(mapping_frame, textvariable=self.mapping_vars["end_date"], state="readonly", width=30)
+        combo.grid(row=len(required_fields), column=1, sticky=tk.W, padx=5, pady=2)
+        
+        # Preview
+        preview_frame = ttk.LabelFrame(main_frame, text="Data Preview", padding="5")
+        preview_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        # Create treeview for preview
+        self.preview_tree = ttk.Treeview(preview_frame, show="headings")
+        self.preview_tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+        
+        # Add scrollbar to preview
+        scrollbar = ttk.Scrollbar(preview_frame, orient="vertical", command=self.preview_tree.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.preview_tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        ttk.Button(button_frame, text="Import", command=self.import_data, width=10).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=self.destroy, width=10).pack(side=tk.RIGHT, padx=5)
+        
+        # Center the dialog
+        self.center_on_parent()
+    
+    def center_on_parent(self):
+        """Center the dialog on the parent window"""
+        self.update_idletasks()
+        parent_x = self.parent.winfo_rootx()
+        parent_y = self.parent.winfo_rooty()
+        parent_width = self.parent.winfo_width()
+        parent_height = self.parent.winfo_height()
+        
+        width = self.winfo_width()
+        height = self.winfo_height()
+        
+        x = parent_x + (parent_width - width) // 2
+        y = parent_y + (parent_height - height) // 2
+        
+        self.geometry(f"+{x}+{y}")
+    
+    def browse_file(self):
+        """Open file dialog to select CSV file"""
+        try:
+            filename = filedialog.askopenfilename(
+                parent=self,
+                title="Select CSV File",
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+            )
+            
+            if filename:
+                print(f"Selected file: {filename}")  # Debug log
+                self.filename = filename
+                self.file_label.config(text=os.path.basename(filename))
+                self.load_preview()
+        except Exception as e:
+            print(f"Error in browse_file: {str(e)}")  # Debug log
+            messagebox.showerror("Error", f"Failed to open file dialog: {str(e)}")
+    
+    def load_preview(self):
+        """Load and display preview of CSV data"""
+        try:
+            print(f"Loading preview for file: {self.filename}")  # Debug log
+            
+            # Clear existing preview
+            for item in self.preview_tree.get_children():
+                self.preview_tree.delete(item)
+            
+            # Read CSV file
+            with open(self.filename, 'r', encoding='utf-8-sig') as f:
+                reader = csv.reader(f)
+                headers = next(reader)  # Get headers
+                self.data = list(reader)  # Get data rows
+            
+            print(f"Headers: {headers}")  # Debug log
+            print(f"Number of data rows: {len(self.data)}")  # Debug log
+            
+            # Update column mappings
+            for var in self.mapping_vars.values():
+                var.set('')  # Clear previous selections
+            
+            # Update combobox values for all mapping fields
+            for field, var in self.mapping_vars.items():
+                combo_values = [''] + headers
+                for widget in self.winfo_children()[0].winfo_children()[1].winfo_children():
+                    if isinstance(widget, ttk.Combobox) and widget.cget('textvariable') == str(var):
+                        widget['values'] = combo_values
+            
+            # Try to automatically map columns based on header names
+            for field, var in self.mapping_vars.items():
+                field_variations = [
+                    field,
+                    field.replace('_', ''),
+                    field.replace('_', ' '),
+                    field.title(),
+                    field.replace('_', ' ').title(),
+                ]
+                
+                for header in headers:
+                    if header.lower().strip() in [v.lower() for v in field_variations]:
+                        var.set(header)
+                        break
+            
+            # Configure treeview columns
+            self.preview_tree['columns'] = headers
+            for col in headers:
+                self.preview_tree.heading(col, text=col)
+                self.preview_tree.column(col, width=100)
+            
+            # Add first 10 rows to preview
+            for row in self.data[:10]:
+                self.preview_tree.insert('', tk.END, values=row)
+            
+            print("Preview loaded successfully")  # Debug log
+            
+        except Exception as e:
+            print(f"Error in load_preview: {str(e)}")  # Debug log
+            messagebox.showerror("Error", f"Failed to load CSV file: {str(e)}")
+    
+    def import_data(self):
+        """Import data from CSV file"""
+        if not self.filename or not self.data:
+            messagebox.showwarning("Warning", "Please select a CSV file first.")
+            return
+        
+        # Validate mappings
+        required_fields = ["name", "manager_code", "cost_center", "employment_type", "start_date"]
+        missing_fields = []
+        
+        for field in required_fields:
+            if not self.mapping_vars[field].get():
+                missing_fields.append(field.replace('_', ' ').title())
+        
+        if missing_fields:
+            messagebox.showwarning("Warning", f"Please map the following required fields: {', '.join(missing_fields)}")
+            return
+        
+        try:
+            # Get column indices for mapped fields
+            mappings = {field: -1 for field in self.mapping_vars.keys()}
+            with open(self.filename, 'r', encoding='utf-8-sig') as f:
+                headers = next(csv.reader(f))
+                for field, var in self.mapping_vars.items():
+                    if var.get():
+                        mappings[field] = headers.index(var.get())
+            
+            # Import data
+            session = get_session()
+            imported = 0
+            errors = []
+            
+            for row in self.data:
+                try:
+                    # Parse dates
+                    start_date = datetime.strptime(row[mappings["start_date"]], "%Y-%m-%d").date()
+                    end_date = None
+                    if mappings["end_date"] >= 0 and row[mappings["end_date"]].strip():
+                        end_date = datetime.strptime(row[mappings["end_date"]], "%Y-%m-%d").date()
+                    
+                    # Create employee
+                    employee = Employee(
+                        name=row[mappings["name"]],
+                        manager_code=row[mappings["manager_code"]],
+                        cost_center=row[mappings["cost_center"]],
+                        employment_type=row[mappings["employment_type"]],
+                        start_date=start_date,
+                        end_date=end_date
+                    )
+                    
+                    session.add(employee)
+                    imported += 1
+                    
+                except Exception as e:
+                    errors.append(f"Row {imported + 1}: {str(e)}")
+            
+            session.commit()
+            session.close()
+            
+            # Show results
+            if errors:
+                messagebox.showwarning("Import Complete", 
+                    f"Imported {imported} employees with {len(errors)} errors.\n\n"
+                    f"Errors:\n" + "\n".join(errors[:10]) +
+                    ("\n..." if len(errors) > 10 else ""))
+            else:
+                messagebox.showinfo("Success", f"Successfully imported {imported} employees.")
+            
+            # Refresh employee list
+            if isinstance(self.parent, ForecastApp):
+                self.parent.employee_tab.load_employees()
+            
+            self.destroy()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to import data: {str(e)}")
+            if 'session' in locals():
+                session.close()
 
 if __name__ == "__main__":
     app = ForecastApp()
