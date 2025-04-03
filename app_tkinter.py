@@ -10,19 +10,21 @@ from matplotlib.figure import Figure
 import csv
 import os
 
-# Define modern color scheme
+# Define modern color scheme with better cross-platform readability
 COLORS = {
     'primary': '#2c3e50',      # Dark blue-gray
-    'secondary': '#3498db',    # Bright blue
-    'accent': '#e74c3c',       # Red
-    'success': '#2ecc71',      # Green
-    'warning': '#f1c40f',      # Yellow
-    'background': '#ecf0f1',   # Light gray
-    'text': '#000000',         # Black (changed from blue-gray for better readability)
-    'text_light': '#34495e',   # Darker gray (changed for better contrast)
+    'secondary': '#2980b9',    # Darker blue for better contrast
+    'accent': '#c0392b',       # Darker red for better contrast
+    'success': '#27ae60',      # Darker green for better contrast
+    'warning': '#f39c12',      # Darker yellow for better contrast
+    'background': '#f5f5f5',   # Lighter gray for better contrast with text
+    'text': '#000000',         # Black for maximum readability
+    'text_light': '#2c3e50',   # Darker blue-gray for better contrast
     'white': '#ffffff',        # White
-    'border': '#bdc3c7',        # Medium gray
-    'dark': '#7f8c8d'          # Darker gray
+    'border': '#95a5a6',        # Darker medium gray for better visibility
+    'dark': '#7f8c8d',          # Darker gray
+    'table_header': '#d5d5d5',  # Light gray for table headers
+    'table_row_alt': '#eaeaea'  # Alternate row color for better readability
 }
 
 # Configure ttk styles
@@ -65,7 +67,7 @@ def configure_styles():
         padding=5
     )
     
-    # Configure treeview styles
+    # Configure treeview styles with improved contrast
     style.configure('Treeview',
         background=COLORS['white'],
         foreground=COLORS['text'],
@@ -75,8 +77,8 @@ def configure_styles():
     
     # Configure treeview headings with more visible styling
     style.configure('Treeview.Heading',
-        background='#d3d3d3',  # Light gray background for better text contrast
-        foreground='#000000',  # Black text for maximum readability
+        background=COLORS['table_header'],  # Light gray background for better text contrast
+        foreground=COLORS['text'],  # Black text for maximum readability
         padding=5,
         relief='raised',  # Add relief to make headings stand out
         borderwidth=1,
@@ -114,6 +116,9 @@ def configure_styles():
         background=[('selected', COLORS['secondary'])],
         foreground=[('selected', COLORS['white'])]
     )
+    
+    # Add alternating row colors for better readability - handled in the treeview creation
+    # as ttk.Treeview doesn't directly support alternating row colors through style mapping
     
     # Configure combobox styles
     style.configure('TCombobox',
@@ -419,6 +424,7 @@ class EmployeeTab(ttk.Frame):
         ttk.Button(button_container, text="Add Employee", command=self.add_employee).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_container, text="Edit Employee", command=self.edit_employee).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_container, text="Delete Employee", command=self.delete_employee).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_container, text="Import Employees", command=self.import_employees).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_container, text="Refresh", command=self.load_employees).pack(side=tk.LEFT, padx=5)
         
         # Create treeview
@@ -456,8 +462,11 @@ class EmployeeTab(ttk.Frame):
             session = get_session()
             employees = session.query(Employee).all()
             
+            # For alternating row colors
+            count = 0
+            
             for emp in employees:
-                self.tree.insert("", tk.END, values=(
+                item_id = self.tree.insert("", tk.END, values=(
                     emp.id,
                     emp.name,
                     emp.manager_code,
@@ -466,6 +475,17 @@ class EmployeeTab(ttk.Frame):
                     emp.start_date.strftime("%m/%d/%y") if emp.start_date else "",
                     emp.end_date.strftime("%m/%d/%y") if emp.end_date else ""
                 ))
+                
+                # Apply alternating row colors
+                if count % 2 == 1:
+                    self.tree.item(item_id, tags=('evenrow',))
+                else:
+                    self.tree.item(item_id, tags=('oddrow',))
+                count += 1
+            
+            # Configure row tags
+            self.tree.tag_configure('oddrow', background=COLORS['white'])
+            self.tree.tag_configure('evenrow', background=COLORS['table_row_alt'])
             
             session.close()
         except Exception as e:
@@ -591,6 +611,92 @@ class EmployeeTab(ttk.Frame):
             session.close()
         except Exception as e:
             messagebox.showerror("Error", f"Failed to delete employee: {str(e)}")
+            
+    def import_employees(self):
+        """Import employees from a CSV file"""
+        # Ask user to select a CSV file
+        file_path = filedialog.askopenfilename(
+            title="Select CSV File",
+            filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")]
+        )
+        
+        if not file_path:
+            return  # User cancelled
+        
+        try:
+            # Read CSV file
+            with open(file_path, 'r', newline='', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+                
+                # Check required columns
+                required_columns = ['name', 'manager_code', 'cost_center', 'employment_type', 'start_date']
+                headers = reader.fieldnames
+                
+                if not all(col in headers for col in required_columns):
+                    missing = [col for col in required_columns if col not in headers]
+                    messagebox.showerror("Error", f"CSV file is missing required columns: {', '.join(missing)}\n\n"
+                                       f"Required columns are: {', '.join(required_columns)}")
+                    return
+                
+                # Begin import
+                session = get_session()
+                imported_count = 0
+                error_count = 0
+                error_messages = []
+                
+                for row in reader:
+                    try:
+                        # Parse dates
+                        try:
+                            start_date = datetime.strptime(row['start_date'], "%m/%d/%y").date()
+                        except ValueError:
+                            raise ValueError(f"Invalid start date format for {row['name']}: {row['start_date']}. Use MM/DD/YY.")
+                        
+                        end_date = None
+                        if 'end_date' in row and row['end_date']:
+                            try:
+                                end_date = datetime.strptime(row['end_date'], "%m/%d/%y").date()
+                            except ValueError:
+                                raise ValueError(f"Invalid end date format for {row['name']}: {row['end_date']}. Use MM/DD/YY.")
+                        
+                        # Create employee
+                        employee = Employee(
+                            name=row['name'],
+                            manager_code=row['manager_code'],
+                            cost_center=row['cost_center'],
+                            employment_type=row['employment_type'],
+                            start_date=start_date,
+                            end_date=end_date
+                        )
+                        
+                        session.add(employee)
+                        imported_count += 1
+                    except Exception as e:
+                        error_count += 1
+                        error_messages.append(f"Row {reader.line_num}: {str(e)}")
+                        if error_count >= 5:  # Limit error messages to avoid huge dialog
+                            error_messages.append("(Additional errors not shown)")
+                            break
+                
+                # Commit changes
+                if imported_count > 0:
+                    session.commit()
+                
+                session.close()
+                
+                # Show results
+                if error_count > 0:
+                    messagebox.showwarning("Import Results", 
+                                         f"Imported {imported_count} employees with {error_count} errors.\n\n"
+                                         f"Errors:\n{chr(10).join(error_messages)}")
+                else:
+                    messagebox.showinfo("Import Success", f"Successfully imported {imported_count} employees.")
+                
+                # Reload data
+                self.load_employees()
+                
+        except Exception as e:
+            messagebox.showerror("Import Error", f"Failed to import employees: {str(e)}")
 
 class ProjectAllocationTab(ttk.Frame):
     def __init__(self, parent):
@@ -661,8 +767,11 @@ class ProjectAllocationTab(ttk.Frame):
             session = get_session()
             allocations = session.query(ProjectAllocation).all()
             
+            # For alternating row colors
+            count = 0
+            
             for allocation in allocations:
-                self.tree.insert("", tk.END, values=(
+                item_id = self.tree.insert("", tk.END, values=(
                     allocation.manager_code,
                     allocation.year,
                     allocation.cost_center,
@@ -680,6 +789,17 @@ class ProjectAllocationTab(ttk.Frame):
                     allocation.nov,
                     allocation.dec
                 ))
+                
+                # Apply alternating row colors
+                if count % 2 == 1:
+                    self.tree.item(item_id, tags=('evenrow',))
+                else:
+                    self.tree.item(item_id, tags=('oddrow',))
+                count += 1
+            
+            # Configure row tags
+            self.tree.tag_configure('oddrow', background=COLORS['white'])
+            self.tree.tag_configure('evenrow', background=COLORS['table_row_alt'])
             
             session.close()
         except Exception as e:
@@ -1930,8 +2050,11 @@ class PlannedChangesTab(ttk.Frame):
                 )
             ).all()
             
+            # For alternating row colors
+            count = 0
+            
             for change in changes:
-                self.tree.insert("", tk.END, values=(
+                item_id = self.tree.insert("", tk.END, values=(
                     change.id,
                     change.description,
                     change.change_type,
@@ -1941,6 +2064,17 @@ class PlannedChangesTab(ttk.Frame):
                     change.manager_code or "",
                     change.status
                 ))
+                
+                # Apply alternating row colors
+                if count % 2 == 1:
+                    self.tree.item(item_id, tags=('evenrow',))
+                else:
+                    self.tree.item(item_id, tags=('oddrow',))
+                count += 1
+            
+            # Configure row tags
+            self.tree.tag_configure('oddrow', background=COLORS['white'])
+            self.tree.tag_configure('evenrow', background=COLORS['table_row_alt'])
             
             session.close()
         except Exception as e:
@@ -2069,9 +2203,12 @@ class PlannedChangeDialog(tk.Toplevel):
         self.parent = parent
         self.change = change
         self.result = None
+        self.employee_id = None
+        if change and change.employee_id:
+            self.employee_id = change.employee_id
         
         self.title("Planned Change")
-        self.geometry("500x450")
+        self.geometry("550x550")
         self.resizable(True, True)
         
         # Make dialog modal
@@ -2091,42 +2228,68 @@ class PlannedChangeDialog(tk.Toplevel):
         ttk.Label(frame, text="Change Type:").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.change_type_var = tk.StringVar(value=change.change_type if change else "")
         change_types = [ct.value for ct in ChangeType]
-        ttk.Combobox(frame, textvariable=self.change_type_var, values=change_types, width=20, state="readonly").grid(row=1, column=1, sticky=tk.W, pady=5)
+        self.change_type_combo = ttk.Combobox(frame, textvariable=self.change_type_var, values=change_types, width=20, state="readonly")
+        self.change_type_combo.grid(row=1, column=1, sticky=tk.W, pady=5)
+        self.change_type_combo.bind("<<ComboboxSelected>>", self.on_change_type_selected)
         
         # Effective date
         ttk.Label(frame, text="Effective Date (mm/dd/yy):").grid(row=2, column=0, sticky=tk.W, pady=5)
         self.effective_date_var = tk.StringVar(value=change.effective_date.strftime("%m/%d/%y") if change and change.effective_date else datetime.now().strftime("%m/%d/%y"))
         ttk.Entry(frame, textvariable=self.effective_date_var, width=20).grid(row=2, column=1, sticky=tk.W, pady=5)
         
+        # Employee selection frame for termination/conversion
+        self.employee_selection_frame = ttk.LabelFrame(frame, text="Select Employee", padding=10)
+        self.employee_selection_frame.grid(row=3, column=0, columnspan=2, pady=10, sticky=tk.EW)
+        self.employee_selection_frame.grid_remove()  # Hide initially
+        
+        # Employee listbox with scrollbar
+        self.employee_listbox_frame = ttk.Frame(self.employee_selection_frame)
+        self.employee_listbox_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        self.employee_listbox = tk.Listbox(self.employee_listbox_frame, height=6, width=40)
+        self.employee_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        scrollbar = ttk.Scrollbar(self.employee_listbox_frame, orient=tk.VERTICAL, command=self.employee_listbox.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.employee_listbox.config(yscrollcommand=scrollbar.set)
+        
+        # Bind selection event
+        self.employee_listbox.bind('<<ListboxSelect>>', self.on_employee_selected)
+        
         # Employee details frame
-        details_frame = ttk.LabelFrame(frame, text="Employee Details", padding=10)
-        details_frame.grid(row=3, column=0, columnspan=2, pady=10, sticky=tk.EW)
+        self.details_frame = ttk.LabelFrame(frame, text="Employee Details", padding=10)
+        self.details_frame.grid(row=4, column=0, columnspan=2, pady=10, sticky=tk.EW)
         
         # Name
-        ttk.Label(details_frame, text="Name:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        ttk.Label(self.details_frame, text="Name:").grid(row=0, column=0, sticky=tk.W, pady=5)
         self.name_var = tk.StringVar(value=change.name if change else "")
-        ttk.Entry(details_frame, textvariable=self.name_var, width=30).grid(row=0, column=1, sticky=tk.W, pady=5)
+        self.name_entry = ttk.Entry(self.details_frame, textvariable=self.name_var, width=30)
+        self.name_entry.grid(row=0, column=1, sticky=tk.W, pady=5)
         
         # Team
-        ttk.Label(details_frame, text="Team:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        ttk.Label(self.details_frame, text="Team:").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.team_var = tk.StringVar(value=change.team if change else "")
-        ttk.Entry(details_frame, textvariable=self.team_var, width=30).grid(row=1, column=1, sticky=tk.W, pady=5)
+        self.team_entry = ttk.Entry(self.details_frame, textvariable=self.team_var, width=30)
+        self.team_entry.grid(row=1, column=1, sticky=tk.W, pady=5)
         
         # Manager code
-        ttk.Label(details_frame, text="Manager Code:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        ttk.Label(self.details_frame, text="Manager Code:").grid(row=2, column=0, sticky=tk.W, pady=5)
         self.manager_code_var = tk.StringVar(value=change.manager_code if change else "")
-        ttk.Entry(details_frame, textvariable=self.manager_code_var, width=20).grid(row=2, column=1, sticky=tk.W, pady=5)
+        self.manager_code_entry = ttk.Entry(self.details_frame, textvariable=self.manager_code_var, width=20)
+        self.manager_code_entry.grid(row=2, column=1, sticky=tk.W, pady=5)
         
         # Cost center
-        ttk.Label(details_frame, text="Cost Center:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        ttk.Label(self.details_frame, text="Cost Center:").grid(row=3, column=0, sticky=tk.W, pady=5)
         self.cost_center_var = tk.StringVar(value=change.cost_center if change else "")
-        ttk.Entry(details_frame, textvariable=self.cost_center_var, width=20).grid(row=3, column=1, sticky=tk.W, pady=5)
+        self.cost_center_entry = ttk.Entry(self.details_frame, textvariable=self.cost_center_var, width=20)
+        self.cost_center_entry.grid(row=3, column=1, sticky=tk.W, pady=5)
         
         # Employment type
-        ttk.Label(details_frame, text="Employment Type:").grid(row=4, column=0, sticky=tk.W, pady=5)
+        ttk.Label(self.details_frame, text="Employment Type:").grid(row=4, column=0, sticky=tk.W, pady=5)
         self.employment_type_var = tk.StringVar(value=change.employment_type if change else "")
         employment_types = [et.value for et in EmploymentType]
-        ttk.Combobox(details_frame, textvariable=self.employment_type_var, values=employment_types, width=20).grid(row=4, column=1, sticky=tk.W, pady=5)
+        self.employment_type_combo = ttk.Combobox(self.details_frame, textvariable=self.employment_type_var, values=employment_types, width=20)
+        self.employment_type_combo.grid(row=4, column=1, sticky=tk.W, pady=5)
         
         # Status
         ttk.Label(frame, text="Status:").grid(row=5, column=0, sticky=tk.W, pady=5)
@@ -2143,6 +2306,15 @@ class PlannedChangeDialog(tk.Toplevel):
         
         # Center the dialog
         self.center_on_parent()
+        
+        # Load employees for listbox if change type is already set
+        if change and change.change_type in [ChangeType.CONVERSION.value, ChangeType.TERMINATION.value]:
+            self.on_change_type_selected(None)
+            
+            # Set the selected employee if there is one
+            if change.employee_id:
+                self.employee_id = change.employee_id
+                self.load_employee_details(change.employee_id)
     
     def center_on_parent(self):
         """Center the dialog on its parent window"""
@@ -2164,6 +2336,96 @@ class PlannedChangeDialog(tk.Toplevel):
         # Set position only (preserve size)
         self.geometry(f"+{x}+{y}")
     
+    def on_change_type_selected(self, event):
+        """Handle change type selection"""
+        change_type = self.change_type_var.get()
+        
+        if change_type in [ChangeType.CONVERSION.value, ChangeType.TERMINATION.value]:
+            # Show employee selection for conversion/termination
+            self.employee_selection_frame.grid()
+            self.load_employees()
+        else:
+            # Hide employee selection for other change types
+            self.employee_selection_frame.grid_remove()
+            self.employee_id = None
+            
+            # Clear and enable employee detail fields
+            self.name_var.set("")
+            self.team_var.set("")
+            self.manager_code_var.set("")
+            self.cost_center_var.set("")
+            self.employment_type_var.set("")
+            
+            self.name_entry.config(state="normal")
+            self.team_entry.config(state="normal")
+            self.manager_code_entry.config(state="normal")
+            self.cost_center_entry.config(state="normal")
+            self.employment_type_combo.config(state="normal")
+    
+    def load_employees(self):
+        """Load employees into the listbox"""
+        try:
+            # Clear the listbox
+            self.employee_listbox.delete(0, tk.END)
+            
+            # Get employees from database
+            session = get_session()
+            employees = session.query(Employee).all()
+            
+            # Store employee data for later use
+            self.employees = {}
+            
+            # Add employees to listbox
+            for emp in employees:
+                display_text = f"{emp.name} - {emp.manager_code} ({emp.employment_type})"
+                self.employee_listbox.insert(tk.END, display_text)
+                # Store employee data with the index
+                index = self.employee_listbox.size() - 1
+                self.employees[index] = emp
+                
+                # Select the employee if it matches the current change
+                if self.employee_id and emp.id == self.employee_id:
+                    self.employee_listbox.selection_set(index)
+                    self.employee_listbox.see(index)
+            
+            session.close()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load employees: {str(e)}")
+    
+    def on_employee_selected(self, event):
+        """Handle employee selection from listbox"""
+        selection = self.employee_listbox.curselection()
+        if selection:
+            index = selection[0]
+            employee = self.employees[index]
+            self.employee_id = employee.id
+            self.load_employee_details(employee.id)
+    
+    def load_employee_details(self, employee_id):
+        """Load details of the selected employee"""
+        try:
+            session = get_session()
+            employee = session.query(Employee).filter(Employee.id == employee_id).first()
+            
+            if employee:
+                # Set employee details in form
+                self.name_var.set(employee.name)
+                self.team_var.set("")  # Assuming team is not in Employee model
+                self.manager_code_var.set(employee.manager_code)
+                self.cost_center_var.set(employee.cost_center)
+                self.employment_type_var.set(employee.employment_type)
+                
+                # Disable editing of employee details for termination/conversion
+                self.name_entry.config(state="readonly")
+                self.team_entry.config(state="readonly")
+                self.manager_code_entry.config(state="readonly")
+                self.cost_center_entry.config(state="readonly")
+                self.employment_type_combo.config(state="readonly")
+            
+            session.close()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load employee details: {str(e)}")
+    
     def on_ok(self):
         try:
             # Validate required fields
@@ -2175,6 +2437,10 @@ class PlannedChangeDialog(tk.Toplevel):
                 raise ValueError("Effective Date is required")
             if not self.status_var.get():
                 raise ValueError("Status is required")
+                
+            # Validate employee selection for termination/conversion
+            if self.change_type_var.get() in [ChangeType.CONVERSION.value, ChangeType.TERMINATION.value] and not self.employee_id:
+                raise ValueError("Please select an employee for termination or conversion")
             
             # Parse effective date
             try:
@@ -2194,6 +2460,10 @@ class PlannedChangeDialog(tk.Toplevel):
                 "employment_type": self.employment_type_var.get(),
                 "status": self.status_var.get()
             }
+            
+            # Include employee ID if selected
+            if self.employee_id:
+                self.result["employee_id"] = self.employee_id
             
             # If this is an existing change, include the ID
             if self.change and self.change.id:
