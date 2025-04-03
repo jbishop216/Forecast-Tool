@@ -34,13 +34,12 @@ def configure_styles():
     # Configure main window style
     style.configure('Main.TFrame', background=COLORS['background'])
     
-    # Configure notebook style with better contrast for selected tabs
+    # Basic notebook styling that should work across platforms
     style.configure('TNotebook', background=COLORS['background'])
     style.configure('TNotebook.Tab', padding=[10, 5], background=COLORS['background'], foreground=COLORS['text'])
     style.map('TNotebook.Tab',
-        background=[('selected', COLORS['secondary'])],  # Use secondary color for better visibility
-        foreground=[('selected', COLORS['white'])],      # White text on selected tab
-        relief=[('selected', 'sunken')]                  # Add relief effect to make selection more obvious
+        background=[('selected', COLORS['secondary'])],
+        foreground=[('selected', COLORS['white'])]
     )
     
     # Configure button styles
@@ -190,6 +189,7 @@ class Employee(Base):
     manager_code = Column(String, nullable=False)
     cost_center = Column(String, nullable=False)
     employment_type = Column(String, nullable=False)
+    work_code = Column(String, nullable=True)  # Added work code field
     start_date = Column(Date, nullable=False)
     end_date = Column(Date)
 
@@ -304,25 +304,30 @@ class EmployeeDialog(tk.Toplevel):
         self.cost_center_var = tk.StringVar()
         ttk.Entry(frame, textvariable=self.cost_center_var, width=20).grid(row=2, column=1, sticky=tk.W, pady=5)
         
+        # Work Code
+        ttk.Label(frame, text="Work Code:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        self.work_code_var = tk.StringVar()
+        ttk.Entry(frame, textvariable=self.work_code_var, width=20).grid(row=3, column=1, sticky=tk.W, pady=5)
+        
         # Employment Type
-        ttk.Label(frame, text="Employment Type:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        ttk.Label(frame, text="Employment Type:").grid(row=4, column=0, sticky=tk.W, pady=5)
         self.employment_type_var = tk.StringVar()
         employment_types = [et.value for et in EmploymentType]
-        ttk.Combobox(frame, textvariable=self.employment_type_var, values=employment_types, width=20, state="readonly").grid(row=3, column=1, sticky=tk.W, pady=5)
+        ttk.Combobox(frame, textvariable=self.employment_type_var, values=employment_types, width=20, state="readonly").grid(row=4, column=1, sticky=tk.W, pady=5)
         
         # Start Date
-        ttk.Label(frame, text="Start Date (mm/dd/yy):").grid(row=4, column=0, sticky=tk.W, pady=5)
+        ttk.Label(frame, text="Start Date (mm/dd/yy):").grid(row=5, column=0, sticky=tk.W, pady=5)
         self.start_date_var = tk.StringVar()
-        ttk.Entry(frame, textvariable=self.start_date_var, width=20).grid(row=4, column=1, sticky=tk.W, pady=5)
+        ttk.Entry(frame, textvariable=self.start_date_var, width=20).grid(row=5, column=1, sticky=tk.W, pady=5)
         
         # End Date
-        ttk.Label(frame, text="End Date (mm/dd/yy):").grid(row=5, column=0, sticky=tk.W, pady=5)
+        ttk.Label(frame, text="End Date (mm/dd/yy):").grid(row=6, column=0, sticky=tk.W, pady=5)
         self.end_date_var = tk.StringVar()
-        ttk.Entry(frame, textvariable=self.end_date_var, width=20).grid(row=5, column=1, sticky=tk.W, pady=5)
+        ttk.Entry(frame, textvariable=self.end_date_var, width=20).grid(row=6, column=1, sticky=tk.W, pady=5)
         
         # Buttons
         button_frame = ttk.Frame(frame)
-        button_frame.grid(row=6, column=0, columnspan=2, pady=10)
+        button_frame.grid(row=7, column=0, columnspan=2, pady=10)
         
         ttk.Button(button_frame, text="OK", command=self.on_ok, width=10).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Cancel", command=self.on_cancel, width=10).pack(side=tk.LEFT, padx=5)
@@ -332,6 +337,7 @@ class EmployeeDialog(tk.Toplevel):
             self.name_var.set(employee.name)
             self.manager_code_var.set(employee.manager_code)
             self.cost_center_var.set(employee.cost_center)
+            self.work_code_var.set(employee.work_code if employee.work_code else "")
             self.employment_type_var.set(employee.employment_type)
             self.start_date_var.set(employee.start_date.strftime("%m/%d/%y") if employee.start_date else "")
             self.end_date_var.set(employee.end_date.strftime("%m/%d/%y") if employee.end_date else "")
@@ -383,6 +389,7 @@ class EmployeeDialog(tk.Toplevel):
                 "name": self.name_var.get().strip(),
                 "manager_code": self.manager_code_var.get().strip(),
                 "cost_center": self.cost_center_var.get().strip(),
+                "work_code": self.work_code_var.get().strip(),
                 "employment_type": self.employment_type_var.get(),
                 "start_date": start_date,
                 "end_date": end_date
@@ -500,21 +507,22 @@ class EmployeeTab(ttk.Frame):
         if dialog.result:
             try:
                 session = get_session()
-                
+
                 # Create new employee
                 employee = Employee(
                     name=dialog.result["name"],
                     manager_code=dialog.result["manager_code"],
                     cost_center=dialog.result["cost_center"],
+                    work_code=dialog.result["work_code"],
                     employment_type=dialog.result["employment_type"],
                     start_date=dialog.result["start_date"],
                     end_date=dialog.result["end_date"]
                 )
-                
+
                 session.add(employee)
                 session.commit()
                 session.close()
-                
+
                 # Reload data
                 self.load_employees()
                 
@@ -555,6 +563,7 @@ class EmployeeTab(ttk.Frame):
                         employee.name = dialog.result["name"]
                         employee.manager_code = dialog.result["manager_code"]
                         employee.cost_center = dialog.result["cost_center"]
+                        employee.work_code = dialog.result["work_code"]
                         employee.employment_type = dialog.result["employment_type"]
                         employee.start_date = dialog.result["start_date"]
                         employee.end_date = dialog.result["end_date"]
@@ -625,8 +634,8 @@ class EmployeeTab(ttk.Frame):
             return  # User cancelled
         
         try:
-            # Read CSV file
-            with open(file_path, 'r', newline='', encoding='utf-8') as csvfile:
+            # Read CSV file with BOM handling
+            with open(file_path, 'r', newline='', encoding='utf-8-sig') as csvfile:
                 reader = csv.DictReader(csvfile)
                 
                 # Check required columns
@@ -1544,6 +1553,10 @@ class ForecastTab(ttk.Frame):
         toolbar = ttk.Frame(self)
         toolbar.pack(fill=tk.X, padx=5, pady=5)
         
+        # Add Calculate Forecast button with prominent styling
+        calculate_btn = ttk.Button(toolbar, text="Calculate Forecast", command=self.calculate_forecast, style='Primary.TButton')
+        calculate_btn.pack(side=tk.LEFT, padx=2)
+        
         ttk.Button(toolbar, text="Add Forecast", command=self.add_forecast).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Edit Forecast", command=self.edit_forecast).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Delete Forecast", command=self.delete_forecast).pack(side=tk.LEFT, padx=2)
@@ -1800,6 +1813,165 @@ class ForecastTab(ttk.Frame):
             session.close()
         except Exception as e:
             messagebox.showerror("Error", f"Failed to delete forecast: {str(e)}")
+    
+    def calculate_forecast(self):
+        """Automatically calculate forecast based on employee data and allocations"""
+        try:
+            year = int(self.year_var.get())
+            
+            # Get confirmation before proceeding
+            if not messagebox.askyesno("Confirm Calculate", f"This will calculate forecasts for {year} based on current employee data and allocations. Continue?"):
+                return
+            
+            session = get_session()
+            
+            # Get settings for hours calculation
+            settings = session.query(Settings).first()
+            if not settings:
+                messagebox.showerror("Error", "Settings not found. Please configure settings first.")
+                session.close()
+                return
+            
+            # Get all employees
+            employees = session.query(Employee).all()
+            if not employees:
+                messagebox.showwarning("Warning", "No employees found. Please add employees first.")
+                session.close()
+                return
+            
+            # Get all allocations for the year
+            allocations = session.query(ProjectAllocation).filter(ProjectAllocation.year == year).all()
+            
+            # Get all existing forecasts for the year to potentially update
+            existing_forecasts = {}
+            for forecast in session.query(Forecast).filter(Forecast.year == year).all():
+                key = (forecast.manager_code, forecast.cost_center, forecast.work_code)
+                existing_forecasts[key] = forecast
+            
+            # Track what we've processed
+            processed_count = 0
+            created_count = 0
+            updated_count = 0
+            
+            # Process each employee
+            for employee in employees:
+                # Skip employees who ended before this year or started after this year
+                if employee.end_date and employee.end_date.year < year:
+                    continue
+                
+                # Determine work code - use employee's work code if available, otherwise use default
+                work_code = employee.work_code if employee.work_code else "DEFAULT"
+                
+                # Determine hours based on employment type
+                monthly_hours = settings.fte_hours if employee.employment_type == EmploymentType.FTE.value else settings.contractor_hours
+                
+                # Calculate which months the employee is active
+                active_months = {month: 1.0 for month in range(1, 13)}  # Default to full month
+                
+                # Adjust for start date if in this year
+                if employee.start_date.year == year:
+                    for month in range(1, employee.start_date.month):
+                        active_months[month] = 0.0
+                    
+                    # If starting mid-month, prorate
+                    if employee.start_date.day > 1:
+                        days_in_month = 30  # Approximation
+                        active_months[employee.start_date.month] = (days_in_month - employee.start_date.day + 1) / days_in_month
+                
+                # Adjust for end date if in this year
+                if employee.end_date and employee.end_date.year == year:
+                    for month in range(employee.end_date.month + 1, 13):
+                        active_months[month] = 0.0
+                    
+                    # If ending mid-month, prorate
+                    if employee.end_date.day < 30:  # Approximation
+                        days_in_month = 30  # Approximation
+                        active_months[employee.end_date.month] = employee.end_date.day / days_in_month
+                
+                # Create or update forecast
+                key = (employee.manager_code, employee.cost_center, work_code)
+                
+                # Calculate monthly hours
+                month_hours = {
+                    "jan": monthly_hours * active_months[1],
+                    "feb": monthly_hours * active_months[2],
+                    "mar": monthly_hours * active_months[3],
+                    "apr": monthly_hours * active_months[4],
+                    "may": monthly_hours * active_months[5],
+                    "jun": monthly_hours * active_months[6],
+                    "jul": monthly_hours * active_months[7],
+                    "aug": monthly_hours * active_months[8],
+                    "sep": monthly_hours * active_months[9],
+                    "oct": monthly_hours * active_months[10],
+                    "nov": monthly_hours * active_months[11],
+                    "dec": monthly_hours * active_months[12]
+                }
+                
+                # Apply any specific allocations for this employee
+                # (This would require linking allocations to employees, which isn't in the current model)
+                # For now, we'll just use the basic calculation
+                
+                # Calculate total hours
+                total_hours = sum(month_hours.values())
+                
+                if key in existing_forecasts:
+                    # Update existing forecast
+                    forecast = existing_forecasts[key]
+                    forecast.jan = month_hours["jan"]
+                    forecast.feb = month_hours["feb"]
+                    forecast.mar = month_hours["mar"]
+                    forecast.apr = month_hours["apr"]
+                    forecast.may = month_hours["may"]
+                    forecast.jun = month_hours["jun"]
+                    forecast.jul = month_hours["jul"]
+                    forecast.aug = month_hours["aug"]
+                    forecast.sep = month_hours["sep"]
+                    forecast.oct = month_hours["oct"]
+                    forecast.nov = month_hours["nov"]
+                    forecast.dec = month_hours["dec"]
+                    forecast.total_hours = total_hours
+                    updated_count += 1
+                else:
+                    # Create new forecast
+                    forecast = Forecast(
+                        year=year,
+                        manager_code=employee.manager_code,
+                        cost_center=employee.cost_center,
+                        work_code=work_code,
+                        jan=month_hours["jan"],
+                        feb=month_hours["feb"],
+                        mar=month_hours["mar"],
+                        apr=month_hours["apr"],
+                        may=month_hours["may"],
+                        jun=month_hours["jun"],
+                        jul=month_hours["jul"],
+                        aug=month_hours["aug"],
+                        sep=month_hours["sep"],
+                        oct=month_hours["oct"],
+                        nov=month_hours["nov"],
+                        dec=month_hours["dec"],
+                        total_hours=total_hours
+                    )
+                    session.add(forecast)
+                    created_count += 1
+                
+                processed_count += 1
+            
+            # Commit changes
+            session.commit()
+            session.close()
+            
+            # Reload forecasts
+            self.load_forecasts()
+            
+            # Show success message
+            messagebox.showinfo("Forecast Calculation Complete", 
+                              f"Processed {processed_count} employees.\n"
+                              f"Created {created_count} new forecasts.\n"
+                              f"Updated {updated_count} existing forecasts.")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to calculate forecast: {str(e)}")
 
 class ForecastDialog(tk.Toplevel):
     def __init__(self, parent, forecast=None):
@@ -2595,8 +2767,12 @@ class ForecastApp(tk.Tk):
         # Configure styles
         configure_styles()
         
+        # Create a main frame to hold everything
+        main_frame = ttk.Frame(self, style='Main.TFrame')
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
         # Create notebook for tabs
-        self.notebook = ttk.Notebook(self)
+        self.notebook = ttk.Notebook(main_frame)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Create tabs
