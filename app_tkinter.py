@@ -34,12 +34,13 @@ def configure_styles():
     # Configure main window style
     style.configure('Main.TFrame', background=COLORS['background'])
     
-    # Configure notebook style
+    # Configure notebook style with better contrast for selected tabs
     style.configure('TNotebook', background=COLORS['background'])
-    style.configure('TNotebook.Tab', padding=[10, 5], background=COLORS['background'])
+    style.configure('TNotebook.Tab', padding=[10, 5], background=COLORS['background'], foreground=COLORS['text'])
     style.map('TNotebook.Tab',
-        background=[('selected', COLORS['primary'])],
-        foreground=[('selected', COLORS['white'])]
+        background=[('selected', COLORS['secondary'])],  # Use secondary color for better visibility
+        foreground=[('selected', COLORS['white'])],      # White text on selected tab
+        relief=[('selected', 'sunken')]                  # Add relief effect to make selection more obvious
     )
     
     # Configure button styles
